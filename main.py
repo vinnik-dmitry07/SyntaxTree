@@ -26,8 +26,37 @@ tokens = {
     'lb': '(',
     'rb': ')',
 }
-
 tokens.update(oper)
+
+
+def superscript(char):
+    superscripts = {
+        'A': 'ᴬ',
+        'B': 'ᴮ',
+        'D': 'ᴰ',
+        'E': 'ᴱ',
+        'G': 'ᴳ',
+        'H': 'ᴴ',
+        'I': 'ᴵ',
+        'J': 'ᴶ',
+        'K': 'ᴷ',
+        'L': 'ᴸ',
+        'M': 'ᴹ',
+        'N': 'ᴺ',
+        'O': 'ᴼ',
+        'P': 'ᴾ',
+        'R': 'ᴿ',
+        'T': 'ᵀ',
+        'U': 'ᵁ',
+        'V': 'ⱽ',
+        'W': 'ᵂ',
+        '2': '²',
+    }
+    return superscripts[char] if char in superscripts.keys() else '^' + char
+
+
+def overline(s):
+    return s.replace("", '̅')[:-1]
 
 
 def pydot__tree_to_png(tree_, filename, rankdir="LR", **kwargs):
@@ -130,7 +159,6 @@ parser = Lark(
     ''',
     start='programa')
 
-
 tasks = {
     'GCD':
         '''
@@ -232,104 +260,105 @@ tasks = {
         ''',
 }
 
+
+def to_str(tree_):
+    s = ''
+    for x in tree_.iter_subtrees():
+        if len(x.children) == 0:
+            s += (x.data if x.data not in tokens.keys() else tokens[x.data]) + ' '
+        elif len(x.children) == 1 and type(x.children[0]) == Token:
+            s += x.children[0] + ' '
+    return s.strip()
+
+
+class Sem:
+    def __init__(self, type_, tree_):
+        self.type = type_
+        self.tree = tree_
+
+    def __str__(self):
+        return 'Sem_' + self.type + '(' + to_str(self.tree) + ')'
+
+
+def insert_position(position, list1, list2):
+    return list1[:position] + list2 + list1[position:]
+
+
+def traverse(lst):
+    for s in lst:
+        f.write(str(s))
+    f.write('\n')
+
+    n = a = None
+    for n, a in enumerate(lst):
+        if type(a) == Sem:
+            break
+    if type(a) == str:
+        return
+
+    subtree = a.tree
+    if len(subtree.children) == 1:
+        if subtree.children[0].data == 'zmina':
+            lst[n] = subtree.children[0].children[0] + '=>'
+            traverse(lst)
+        elif subtree.children[0].data == 'chyslo':
+            lst[n] = overline(subtree.children[0].children[0])
+            traverse(lst)
+
+    elif subtree.data == 'programa':
+        lst[n] = Sem('S', subtree.children[1])
+        traverse(lst)
+
+    elif len(subtree.children) >= 4:
+        if subtree.children[0].data == 'if':
+
+            lst = insert_position(n, lst,
+                                  ['IF(', Sem('B', subtree.children[1]), ', ', Sem('S', subtree.children[3]), ', ',
+                                   Sem('S', subtree.children[5]) if len(subtree.children) == 6 and
+                                                                    subtree.children[4].data == 'else' else 'id',
+                                   ')'])
+            lst.remove(a)
+            traverse(lst)
+        elif subtree.children[0].data == 'while':
+            lst = insert_position(n, lst,
+                                  ['WH(', Sem('B', subtree.children[1]), ', ', Sem('S', subtree.children[3]), ')'])
+            lst.remove(a)
+            traverse(lst)
+    elif len(subtree.children) == 3:
+        if subtree.children[0].data == 'begin':
+            lst[n] = Sem('S', subtree.children[1])
+            traverse(lst)
+
+        sign = subtree.children[1].data
+        if sign == 'assign':
+            x = to_str(subtree.children[0])
+            lst = insert_position(n, lst, [f'AS{superscript(x)}(', Sem('A', subtree.children[2]), ')'])
+            lst.remove(a)
+            traverse(lst)
+        elif sign == 'semi':
+            lst = insert_position(n, lst, [Sem('S', subtree.children[0]), ' • ', Sem('S', subtree.children[2])])
+            lst.remove(a)
+            traverse(lst)
+        elif sign in oper.keys():
+            # sign = oper[sign]
+            lst = insert_position(n, lst,
+                                  [f'S{superscript("2")}({sign}, ',
+                                   Sem('A', subtree.children[0]), ', ',
+                                   Sem('A', subtree.children[2]), ')'])
+            lst.remove(a)
+            traverse(lst)
+    return lst
+
+
 for task_name, task_text in tasks.items():
     if os.path.exists(task_name):
         shutil.rmtree(task_name)
     os.mkdir(task_name)
 
-    sys.stdout = open(os.path.join(task_name, 'semantic_term.txt'), 'w')
+    f = open(os.path.join(task_name, 'semantic_term.txt'), 'w', encoding="utf-8")
     tree = parser.parse(task_text)
+
+    traverse([Sem('P', tree)])
+    f.close()
+
     pydot__tree_to_png(tree, os.path.join(task_name, 'syntax_tree.png'), rankdir="TB")
-
-    # image = Image.open('res.png')
-    # image.show()
-
-
-    def to_str(tree_):
-        s = ''
-        for x in tree_.iter_subtrees():
-            if len(x.children) == 0:
-                s += (x.data if x.data not in tokens.keys() else tokens[x.data]) + ' '
-            elif len(x.children) == 1 and type(x.children[0]) == Token:
-                s += x.children[0] + ' '
-        return s.strip()
-
-
-    class Sem:
-        def __init__(self, type_, tree_):
-            self.type = type_
-            self.tree = tree_
-
-        def __str__(self):
-            return 'Sem_' + self.type + '(' + to_str(self.tree) + ')'
-
-
-    def insert_position(position, list1, list2):
-        return list1[:position] + list2 + list1[position:]
-
-
-    def traverse(lst):
-        for s in lst:
-            print(str(s), end=' ')
-        print()
-
-        n = a = None
-        for n, a in enumerate(lst):
-            if type(a) == Sem:
-                break
-        if type(a) == str:
-            return
-
-        subtree = a.tree
-        if len(subtree.children) == 1:
-            if subtree.children[0].data == 'zmina':
-                lst[n] = subtree.children[0].children[0] + '=>'
-                traverse(lst)
-            elif subtree.children[0].data == 'chyslo':
-                lst[n] = subtree.children[0].children[0] + '^-'
-                traverse(lst)
-
-        elif subtree.data == 'programa':
-            lst[n] = Sem('S', subtree.children[1])
-            traverse(lst)
-
-        elif len(subtree.children) >= 4:
-            if subtree.children[0].data == 'if':
-
-                lst = insert_position(n, lst,
-                                      ['IF(', Sem('B', subtree.children[1]), ', ', Sem('S', subtree.children[3]), ', ',
-                                       Sem('S', subtree.children[5]) if len(subtree.children) == 6 and
-                                       subtree.children[4].data == 'else' else 'id', ')'])
-                lst.remove(a)
-                traverse(lst)
-            elif subtree.children[0].data == 'while':
-                lst = insert_position(n, lst,
-                                      ['WH(', Sem('B', subtree.children[1]), ',', Sem('S', subtree.children[3]), ')'])
-                lst.remove(a)
-                traverse(lst)
-        elif len(subtree.children) == 3:
-            if subtree.children[0].data == 'begin':
-                lst[n] = Sem('S', subtree.children[1])
-                traverse(lst)
-
-            sign = subtree.children[1].data
-            if sign == 'assign':
-                x = to_str(subtree.children[0])
-                lst = insert_position(n, lst, [f'AS^{x}(', Sem('A', subtree.children[2]), ')'])
-                lst.remove(a)
-                traverse(lst)
-            elif sign == 'semi':
-                lst = insert_position(n, lst, [Sem('S', subtree.children[0]), '•', Sem('S', subtree.children[2])])
-                lst.remove(a)
-                traverse(lst)
-            elif sign in oper.keys():
-                # sign = oper[sign]
-                lst = insert_position(n, lst,
-                                      [f'S^2({sign},', Sem('A', subtree.children[0]), ',', Sem('A', subtree.children[2]),
-                                       ')'])
-                lst.remove(a)
-                traverse(lst)
-        return lst
-
-
-    print(traverse([Sem('P', tree)]))
